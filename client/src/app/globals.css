@@ -27,3 +27,53 @@ body {
     rgb(var(--background-start-rgb));
 }
 */
+
+input,textarea {
+  @apply bg-gray-600;
+  @apply rounded-full;
+  @apply px-2;
+}
+
+button {
+  @apply rounded-full;
+}
+
+body {
+  font-family: 'Ubuntu Mono', 'Courier New', Courier, monospace;
+}
+
+@layer utilities {
+  .scrollbar::-webkit-scrollbar {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-700;
+    @apply border-4;
+    @apply border-solid;
+    @apply border-black;
+    @apply rounded-3xl;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500
+  }
+
+  .innerScrollbar::-webkit-scrollbar {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .innerScrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-700;
+    @apply border-4;
+    @apply border-solid;
+    @apply border-gray-600;
+    @apply rounded-3xl;
+  }
+
+  .innerScrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500
+  }
+}

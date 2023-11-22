@@ -17,7 +17,10 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" className='bg-gray-900 text-white text-lg'>
+        <head>
+          <script src="https://kit.fontawesome.com/0db2e99dd7.js" crossOrigin="anonymous"></script>
+        </head>
         <body className={inter.className}>{children}</body>
       </html>
     </ClerkProvider>
