@@ -1,8 +1,18 @@
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import clerkClient from '@clerk/clerk-sdk-node';
 import getCookies from './modules/getCookies';
+import { ServerWebSocket } from 'bun';
 
 // This is what we need to implement: https://clerk.com/docs/backend-requests/handling/manual-jwt
+
+interface serverCmd {
+  connect?: string,
+  disconnect?: string,
+  message?: {
+    chatRoom: string,
+    content: string,
+  },
+}
 
 // This should be turned into an env var, it will change depending on where the project is deployed
 const clientUrl = 'http://localhost:3000';
@@ -32,11 +42,11 @@ function validateJWTClaims(jwt: JwtPayload): boolean {
 //     username2: webSocket2,
 //   }
 // }
-const chatrooms = {
+const clients: { [key: string]: ServerWebSocket<{ username: string, color: string }> } = {}
 
-}
+const chatRooms: { [key: string]: string[] } = {}
 
-Bun.serve({
+Bun.serve<{ username: string, color: string }>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
@@ -54,6 +64,10 @@ Bun.serve({
         // THEORETICALLY, each user will only have one websocket,
         // Unlike chat-bun which would create a new webSocket for each chatroom
         const user = await clerkClient.users.getUser(jwtResult.sub);
+        console.log(user)
+        // if (user.username) {
+        //   console.log(clients[user.username])
+        // }
         // console.log(user)
         if (server.upgrade(req, {
           data: {
@@ -68,26 +82,77 @@ Bun.serve({
       }
     }
     console.log('FAILED TO VALIDATE')
-    return new Response(JSON.stringify('Failed to authorize user'), { status: 420 });
+    return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
     // return new Response(JSON.stringify('Failed to authorize user'), resOpts);
   },
   websocket: {
     message(ws, message) {
       // See client index page for message structure
-      console.log('RECIEVED MESSAGE')
-      console.log(ws, message)
-      const content = JSON.stringify(message)
-      ws.send(message)
+      console.log('RECIEVED MESSAGE', message)
+      // console.log(ws, message)
+      // console.log(typeof message)
+      const cmd: serverCmd = JSON.parse(message.toString())
+      if (cmd.connect) {
+        if (chatRooms[cmd.connect]) {
+          chatRooms[cmd.connect].push(ws.data.username);
+        } else {
+          chatRooms[cmd.connect] = [ws.data.username];
+        }
+        console.log(chatRooms)
+        // SEND NEW CONNECTION MESSAGE TO ALL USERS
+        for (let username of chatRooms[cmd.connect]) {
+          console.log('SENDING MESSAGE')
+          clients[username].send(JSON.stringify({
+            chatRoom: cmd.connect,
+            formattedMessage: {
+              message: 'has connected',
+              username: ws.data.username,
+              color: ws.data.color
+            }
+          }))
+        }
+      }
+
+      if (cmd.message) {
+        for (let username of chatRooms[cmd.message.chatRoom]) {
+          console.log('SENDING MESSAGE')
+          clients[username].send(JSON.stringify({
+            chatRoom: cmd.message.chatRoom,
+            formattedMessage: {
+              message: cmd.message.content,
+              username: ws.data.username,
+              color: ws.data.color
+            }
+          }))
+        }
+      }
+      // ws.send(message)
     },
     open(ws) {
       // This will probably end up doing nothing
       console.log('OPENING WEBSOCKET')
-      ws.send('TEST USER HAS CONNECTED MESSAGE')
+      clients[ws.data.username] = ws;
+      // ws.send('TEST USER HAS CONNECTED MESSAGE')
+      // console.log('TOTAL CLIENTS', Object.keys(clients).length)
+      // ws.send(JSON.stringify({
+      //   msg: 'TEST USER HAS CONNECTED MESSAGE'
+      // }))
       // console.log(ws)
     },
     close(ws, code, reason) {
       // This will probably also end up doing nothing
       console.log('CLOSING WEBSOCKET')
+      delete clients[ws.data.username]
+
+      for (let chatName in chatRooms) {
+        if (chatRooms[chatName].includes(ws.data.username)) {
+          chatRooms[chatName].splice(chatRooms[chatName].indexOf(ws.data.username), 1)
+        }
+      }
+
+      // YOU MUST POP ALL USERNAMES FROM ALL CHAT ROOMS
+      // THIS IS WHY WE GET DUPLICATE CONNECTIONS
+
       // console.log(ws, code, reason)
     },
   }

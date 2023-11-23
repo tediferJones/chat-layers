@@ -23,12 +23,15 @@ export default function ChatHistory({
       >
         {!Object.keys(servers).includes(currentServer) ? <div className='w-full h-full flex justify-center items-center text-xl'>Please connect to a chat room</div>:
           // servers[currentServer].chatHistory.map((msg: string, i: number) => {
-          servers[currentServer].map((msg: string, i: number) => {
-            const newMessage = JSON.parse(msg);
+          servers[currentServer].map((msg: any, i: number) => {
+            if (i === 0) console.log('##############################################')
+            console.log(msg)
+            const newMessage = msg
+            // const newMessage = JSON.parse(msg);
             // THIS EXPECTS A JSON STRING FORMATED AS { username, color, message }
             return <div className='break-words' key={i}>
               <span style={{ color: newMessage.color }}>{newMessage.username}</span>
-              <span>{newMessage.message}</span>
+              <span>{newMessage.message === 'has connected' ? ' ' : ': '}{newMessage.message}</span>
             </div>
           })
         }
@@ -43,7 +46,18 @@ export default function ChatHistory({
           const message: string = inputs.message.trim();
           console.log('SENDING ' + message)
           console.log(webSocket)
-          webSocket?.send(message)
+          // WORKING
+          // webSocket?.send(message)
+
+          webSocket?.send(JSON.stringify({
+            // message,
+            // chatRoom: currentServer,
+            message: {
+              content: message,
+              chatRoom: currentServer,
+            }
+          }))
+
           // if (message && Object.keys(servers).includes(currentServer)) {
           //   console.log('SEND MESSAGE VIA WEBSOCKET CONNECTION')
           //   // servers[currentServer].send(message);

@@ -11,32 +11,53 @@ export default function NewConnection({
   setToggle,
   setCurrentServer,
   chatRef,
+  webSocket,
 }: {
   servers: Servers,
   setServers: Function,
   setToggle: Function,
   setCurrentServer: Function,
   chatRef: RefObject<HTMLDivElement>,
+  webSocket?: WebSocket,
 }) {
   return (
     <form className='flex flex-wrap gap-4' onSubmit={async(e) => {
       e.preventDefault();
       console.log('FORM SUBMIT')
-      // const form = e.target as HTMLFormElement;
-      // const { servername } = getFormInputs(form)
+      const form = e.target as HTMLFormElement;
+      const { servername } = getFormInputs(form)
 
       // // If user is already connected to this server, just switch chat view to that server
-      // if (Object.keys(servers).includes(servername)) {
-      //   setCurrentServer(servername);
-      //   form.reset();
-      //   return;
-      // }
+      if (Object.keys(servers).includes(servername)) {
+        setCurrentServer(servername);
+        form.reset();
+        return;
+      }
 
-      // const validity = verifyInputs({ servername });
-      // if (!validity.isValid) {
-      //   return viewErrors(form, validity.errors)
-      // }
+      const validity = verifyInputs({ servername });
+      if (!validity.isValid) {
+        return viewErrors(form, validity.errors)
+      }
 
+      webSocket?.send(JSON.stringify({
+        connect: servername
+      }))
+
+      // GET SOME KIND OF RESPONSE
+      // Is that really neccessary?  How could this fail?
+      // It either connects to a chatroom or creates a new one
+
+      setCurrentServer(servername)
+      setServers((oldServers: Servers) => {
+        oldServers[servername] = [];
+        return oldServers;
+      })
+      form.reset();
+      // setToggle((oldToggle: boolean) => !oldToggle)
+
+
+
+      // DONT USE THIS
       // // Fetch port from server
       // const res: Response = await easyFetch('/api/getPort', 'POST', { servername }, true)
       // const { errors, port }: ResBody = await res.json();

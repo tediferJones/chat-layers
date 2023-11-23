@@ -1,7 +1,9 @@
+'use client';
 // MOVE THIS TO LOWER LEVEL COMPONENTS
 
 // import { UserButton } from '@clerk/nextjs';
 import ChatWindow from '@/components/ChatWindow';
+import { useUser } from '@clerk/nextjs';
 // import { useAuth } from '@clerk/nextjs';
 //
 // TRY TO MERGE bun-ssr files served to client into this project
@@ -38,7 +40,39 @@ export default function Home() {
       // <h1>Hello</h1>
       // <button onClick={handler}>Cookie</button>
       // <UserButton />
+
+
+
+  // THIS WORKS AND CAN BE PASSED BETWEEN LOWER COMPONENTS
+  // Should we check for user before establishing websocket connection?
   // const webSocket = new WebSocket('ws://localhost:8000')
+  // webSocket.onmessage = ({ data }) => console.log('RECIEVING MESSAGE', data)
   // console.log(webSocket)
-  return <ChatWindow />
+  // console.log('RENDERING ENTIRE PAGE')
+
+
+  let webSocket;
+  const { user } = useUser();
+  if (user) {
+    // CLICK THE BUTTON, WE ARE CONNECTED
+    // The problem is that child components aren't re-rendering when webSocket gets assigned
+    // Thus components that are passed 'webSocket' as a prop will essentially end up calling undefined.send()
+    console.log('START WEBSOCKET')
+    console.log(webSocket)
+    if (!process.env.NEXT_PUBLIC_WEBSOCKET_URL) {
+      throw Error('CANT FIND ENV VAR FOR WEBSOCKET URL')
+    }
+    // webSocket = new WebSocket('ws://localhost:8000')
+    webSocket = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_URL)
+    // webSocket.onmessage = ({ data }) => {
+    //   console.log('RECEIVING MESSAGE', data)
+    // }
+    // webSocket.onopen = () => console.log('WEBSOCKET HAS BEEN OPENED')
+  }
+  // console.log('ENVIRONMENT VARIABLES')
+  // USE THIS URL TO CONNECT TO WEBSOCKET,
+  // This allows us to easily change the websocket url later if it changes (new deployment platform, redeploy uses a different url, etc...)
+  // console.log(process.env['NEXT_PUBLIC_WEBSOCKET_URL'])
+
+  return <ChatWindow webSocket={webSocket} />
 }
