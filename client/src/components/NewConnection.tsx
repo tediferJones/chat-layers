@@ -28,7 +28,8 @@ export default function NewConnection({
       const { servername } = getFormInputs(form)
 
       // // If user is already connected to this server, just switch chat view to that server
-      if (Object.keys(servers).includes(servername)) {
+      // if (Object.keys(servers).includes(servername)) {
+      if (servers[servername]) {
         setCurrentServer(servername);
         form.reset();
         return;

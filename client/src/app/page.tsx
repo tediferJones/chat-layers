@@ -51,9 +51,10 @@ export default function Home() {
   // console.log('RENDERING ENTIRE PAGE')
 
 
+  // WORKING
   let webSocket;
   const { user } = useUser();
-  if (user) {
+  if (user && !webSocket) {
     // CLICK THE BUTTON, WE ARE CONNECTED
     // The problem is that child components aren't re-rendering when webSocket gets assigned
     // Thus components that are passed 'webSocket' as a prop will essentially end up calling undefined.send()
@@ -75,4 +76,5 @@ export default function Home() {
   // console.log(process.env['NEXT_PUBLIC_WEBSOCKET_URL'])
 
   return <ChatWindow webSocket={webSocket} />
+  // return <ChatWindow />
 }

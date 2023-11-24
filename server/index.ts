@@ -8,6 +8,7 @@ import { ServerWebSocket } from 'bun';
 interface serverCmd {
   connect?: string,
   disconnect?: string,
+  setColor?: string,
   message?: {
     chatRoom: string,
     content: string,
@@ -46,12 +47,15 @@ const clients: { [key: string]: ServerWebSocket<{ username: string, color: strin
 
 const chatRooms: { [key: string]: string[] } = {}
 
-Bun.serve<{ username: string, color: string }>({
+Bun.serve<{ username: string, color: string, userId: string }>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
     // It would be nice if this didnt have 4 different return statements
     console.log('NEW REQUEST')
+
+    // Create verifyUser function and stuff all of this in there
+    // Also create a sendMessage(chatRoom, message) function
     const { __session } = getCookies(req);
     if (__session && process.env.CLERK_PEM_PUBLIC_KEY) {
       const jwtResult = jwt.verify(__session, process.env.CLERK_PEM_PUBLIC_KEY);
@@ -64,13 +68,14 @@ Bun.serve<{ username: string, color: string }>({
         // THEORETICALLY, each user will only have one websocket,
         // Unlike chat-bun which would create a new webSocket for each chatroom
         const user = await clerkClient.users.getUser(jwtResult.sub);
-        console.log(user)
+        // console.log(user)
         // if (user.username) {
         //   console.log(clients[user.username])
         // }
         // console.log(user)
         if (server.upgrade(req, {
           data: {
+            userId: jwtResult.sub,
             username: user.username,
             color: user.publicMetadata.color || '#ffffff',
           },
@@ -93,11 +98,15 @@ Bun.serve<{ username: string, color: string }>({
       // console.log(typeof message)
       const cmd: serverCmd = JSON.parse(message.toString())
       if (cmd.connect) {
-        if (chatRooms[cmd.connect]) {
-          chatRooms[cmd.connect].push(ws.data.username);
-        } else {
-          chatRooms[cmd.connect] = [ws.data.username];
-        }
+        chatRooms[cmd.connect] ? 
+          chatRooms[cmd.connect].push(ws.data.username) : 
+          chatRooms[cmd.connect] = [ws.data.username]
+
+        // if (chatRooms[cmd.connect]) {
+        //   chatRooms[cmd.connect].push(ws.data.username);
+        // } else {
+        //   chatRooms[cmd.connect] = [ws.data.username];
+        // }
         console.log(chatRooms)
         // SEND NEW CONNECTION MESSAGE TO ALL USERS
         for (let username of chatRooms[cmd.connect]) {
@@ -120,6 +129,46 @@ Bun.serve<{ username: string, color: string }>({
             chatRoom: cmd.message.chatRoom,
             formattedMessage: {
               message: cmd.message.content,
+              username: ws.data.username,
+              color: ws.data.color
+            }
+          }))
+        }
+      }
+
+      if (cmd.setColor) {
+        console.log('COLOR', cmd.setColor)
+        // should probably convert this to async
+        clerkClient.users.updateUserMetadata(ws.data.userId, {
+          publicMetadata: {
+            color: cmd.setColor,
+          }
+        }).then(() => {
+            ws.send(JSON.stringify({
+              cmdStatus: true,
+            }))
+          })
+
+        // console.log(ws.data.userId)
+
+        // UPDATE EXISTING WEBSOCKET CONNECTION WHEN USER CHANGES THEIR COLOR
+        clients[ws.data.username].data.color = cmd.setColor;
+      }
+
+      if (cmd.disconnect) {
+        // chatRooms[cmd.disconnect] = chatRooms[cmd.disconnect].splice(chatRooms[cmd.disconnect].indexOf(ws.data.username), 1)
+        chatRooms[cmd.disconnect].splice(chatRooms[cmd.disconnect].indexOf(ws.data.username), 1)
+        // console.log('Disconnected ' + ws.data.username + ' from ' + cmd.disconnect)
+        // console.log(chatRooms)
+        // ws.send(JSON.stringify({
+        //   disconnect: cmd.disconnect,
+        // }))
+        for (let username of chatRooms[cmd.disconnect]) {
+          console.log('SENDING MESSAGE')
+          clients[username].send(JSON.stringify({
+            chatRoom: cmd.disconnect,
+            formattedMessage: {
+              message: 'has disconnected',
               username: ws.data.username,
               color: ws.data.color
             }

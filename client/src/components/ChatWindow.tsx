@@ -1,16 +1,20 @@
 'use client';
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, RefObject } from 'react'
 import UserInfo from '@/components/UserInfo';
 import NewConnection from '@/components/NewConnection';
 import ManageConnections from '@/components/ManageConnections';
 import ChatHistory from '@/components/ChatHistory';
 import { Servers } from '@/types';
+import { useUser } from '@clerk/nextjs';
 // import { useUser } from '@clerk/nextjs';
 
 // TO-DO:
 //    - Send command to server when user closes a chatroom
 //    - Make the server return a response for connect/disconnect commands
 //      - Only modify servers/currentServer after we receive this response
+//      - Is this really neccessary? The only commands are connect, disconnect, setColor, message
+//        and none of those can really error out that badly
+//    - Add input validation to webSocket Server
 
 export default function ChatWindow({ webSocket }: { webSocket?: WebSocket }) {
   // URL needs to be imported from env var somehow
@@ -87,30 +91,108 @@ export default function ChatWindow({ webSocket }: { webSocket?: WebSocket }) {
   //   }
   // }
 
+  // function autoscroll(ref: RefObject<HTMLDivElement>) {
+  //   if (ref.current) {
+  //     // console.log('AUTO SCROLLING')
+  //     let { scrollHeight, scrollTop, clientHeight } = chatRef.current;
+  //     // console.log(scrollHeight, scrollTop, clientHeight)
+  //     // console.log(scrollHeight - Math.ceil(scrollTop) - clientHeight)
+  //     const scollLocation = scrollHeight - Math.ceil(scrollTop) - clientHeight
+  //     // if (scrollHeight - Math.ceil(scrollTop) === clientHeight) {
+  //     if (scollLocation < 5 && scollLocation > -5) {
+  //       // console.log("NOW WE SCROLL")
+  //       setTimeout(() => {
+  //         if (ref.current) {
+  //           ref.current.scrollTop = ref.current.scrollHeight;
+  //         }
+  //       }, 50);
+  //     }
+  //   }
+  // }
+
+
+  // TESTING
+  // let webSocket;
+  // const { user } = useUser();
+
+  // // if (user && !webSocket) {
+  // if (user && !webSocket) {
+  //   console.log('START WEBSOCKET')
+  //   console.log(webSocket)
+  //   if (!process.env.NEXT_PUBLIC_WEBSOCKET_URL) {
+  //     throw Error('CANT FIND ENV VAR FOR WEBSOCKET URL')
+  //   }
+  //   webSocket = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_URL)
+  //   webSocket.onmessage = ({ data }) => {
+  //     const res = JSON.parse(data)
+  //     console.log('RECEIVING MESSAGE', res)
+  //     if (res.formattedMessage) {
+  //       // console.log('RECIEVED FORMATTED MESSAGE')
+  //       // console.log(servers)
+
+  //       // YOU SHOULD PROBABLY MOVE THIS TO ITS OWN FUNCTION
+  //       if (chatRef.current) {
+  //         // console.log('AUTO SCROLLING')
+  //         // console.log(scrollHeight, scrollTop, clientHeight)
+  //         // console.log(scrollHeight - Math.ceil(scrollTop) - clientHeight)
+  //         let { scrollHeight, scrollTop, clientHeight } = chatRef.current;
+  //         const scollLocation = scrollHeight - Math.ceil(scrollTop) - clientHeight
+  //         if (scollLocation < 5 && scollLocation > -5) {
+  //           setTimeout(() => {
+  //             if (chatRef.current) {
+  //               chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  //             }
+  //           }, 50);
+  //         }
+  //       }
+
+  //       setServers({
+  //         ...servers,
+  //         [res.chatRoom]: servers[res.chatRoom].concat(res.formattedMessage),
+  //       })
+
+  //       // DONT USE THIS METHOD, IT RUNS THE SAME CODE TWICE
+  //       // setServers(oldServers => {
+  //       //   // console.log(oldServers, res.chatRoom)
+  //       //   console.log('SETTING STATE')
+  //       //   oldServers[res.chatRoom].push(res.formattedMessage)
+  //       //   return oldServers;
+  //       // })
+  //       //
+  //       // ALSO DONT NEED THIS ANYMORE
+  //       // setToggle((oldToggle: boolean) => !oldToggle)
+  //       // CHANGE STATE HERE, hopefully it will re-render
+  //     }
+  //   }
+  //   webSocket.onopen = () => setIsConnected(true);
+  //   // THIS SHOULD ONLY EVER HAPPEN IF THE SERVER CRASHES, BUT WE SHOULD STILL HANDLE THIS CASE
+  //   // webSocket.onclose = () => console.log('WEBSOCKET IS CLOSING')
+  //   webSocket.onclose = () => window.location.reload();
+  // }
+
+
   // ONLY RUN THIS ONCE, i.e. so it doesnt re run when the page re renders
   // if (webSocket && !webSocket.onmessage) {
   // ACTUALLY WE WANT IT TO RE-RUN EVERYTIME THE PAGE RE-RENDERS
   // Because for some reason this forms a closure and the servers var becomes stale
   if (webSocket) {
-    console.log('SETTING WEBSOCKET')
+    // console.log('SETTING WEBSOCKET')
     // webSocket.onmessage = msgFunc
     webSocket.onmessage = ({ data }) => {
       const res = JSON.parse(data)
       console.log('RECEIVING MESSAGE', res)
       if (res.formattedMessage) {
-        console.log('RECIEVED FORMATTED MESSAGE')
+        // console.log('RECIEVED FORMATTED MESSAGE')
         // console.log(servers)
 
         // YOU SHOULD PROBABLY MOVE THIS TO ITS OWN FUNCTION
         if (chatRef.current) {
           // console.log('AUTO SCROLLING')
-          let { scrollHeight, scrollTop, clientHeight } = chatRef.current;
           // console.log(scrollHeight, scrollTop, clientHeight)
           // console.log(scrollHeight - Math.ceil(scrollTop) - clientHeight)
+          let { scrollHeight, scrollTop, clientHeight } = chatRef.current;
           const scollLocation = scrollHeight - Math.ceil(scrollTop) - clientHeight
-          // if (scrollHeight - Math.ceil(scrollTop) === clientHeight) {
           if (scollLocation < 5 && scollLocation > -5) {
-            // console.log("NOW WE SCROLL")
             setTimeout(() => {
               if (chatRef.current) {
                 chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -133,9 +215,19 @@ export default function ChatWindow({ webSocket }: { webSocket?: WebSocket }) {
         // })
         //
         // ALSO DONT NEED THIS ANYMORE
-        setToggle((oldToggle: boolean) => !oldToggle)
+        // setToggle((oldToggle: boolean) => !oldToggle)
         // CHANGE STATE HERE, hopefully it will re-render
       }
+
+      // if (res.disconnect) {
+      //   console.log('DISCONNECT')
+      //   console.log(servers)
+      //   // setServers((oldServers: Servers) => {
+      //   //   console.log(res.disconnect)
+      //   //   delete oldServers[res.disconnect];
+      //   //   return oldServers;
+      //   // })
+      // }
     }
     // webSocket.onopen = () => console.log('WEBSOCKET HAS BEEN OPENED')
     webSocket.onopen = () => setIsConnected(true);
@@ -159,7 +251,7 @@ export default function ChatWindow({ webSocket }: { webSocket?: WebSocket }) {
           chatRef={chatRef}
           webSocket={webSocket}
         />
-        <UserInfo />
+        <UserInfo webSocket={webSocket} />
       </div>
       {/*
       <button onClick={() => {
@@ -171,6 +263,8 @@ export default function ChatWindow({ webSocket }: { webSocket?: WebSocket }) {
         servers={servers}
         currentServer={currentServer}
         setCurrentServer={setCurrentServer}
+        webSocket={webSocket}
+        setServers={setServers}
       />
       <ChatHistory
         servers={servers}
