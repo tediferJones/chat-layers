@@ -8,16 +8,12 @@ import easyFetch from '@/modules/easyFetch';
 export default function NewConnection({ 
   servers, 
   setServers, 
-  setToggle,
   setCurrentServer,
-  chatRef,
   webSocket,
 }: {
   servers: Servers,
   setServers: Function,
-  setToggle: Function,
   setCurrentServer: Function,
-  chatRef: RefObject<HTMLDivElement>,
   webSocket?: WebSocket,
 }) {
   return (
@@ -28,7 +24,6 @@ export default function NewConnection({
       const { servername } = getFormInputs(form)
 
       // // If user is already connected to this server, just switch chat view to that server
-      // if (Object.keys(servers).includes(servername)) {
       if (servers[servername]) {
         setCurrentServer(servername);
         form.reset();
@@ -44,64 +39,12 @@ export default function NewConnection({
         connect: servername
       }))
 
-      // GET SOME KIND OF RESPONSE
-      // Is that really neccessary?  How could this fail?
-      // It either connects to a chatroom or creates a new one
-
       setCurrentServer(servername)
       setServers((oldServers: Servers) => {
         oldServers[servername] = [];
         return oldServers;
       })
       form.reset();
-      // setToggle((oldToggle: boolean) => !oldToggle)
-
-
-
-      // DONT USE THIS
-      // // Fetch port from server
-      // const res: Response = await easyFetch('/api/getPort', 'POST', { servername }, true)
-      // const { errors, port }: ResBody = await res.json();
-
-      // // If no errors in response, setup new websocket
-      // if (Object.keys(errors).length) {
-      //   return viewErrors(form, errors);
-      // }
-      // form.reset();
-
-      // // Set up new web socket connection
-      // const url = new URL(res.url)
-      // // const ws = new WebSocket(`${url.protocol === 'http:' ? 'ws' : 'wss'}://${url.hostname}:${port}`) as ServerObj;
-      // const ws = new WebSocket(`ws://${url.hostname}:${port}`) as ServerObj;
-      // console.log(ws)
-      // ws.servername = servername;
-      // ws.chatHistory = [];
-      // // TESTING
-      // // ws.onerror = (error) => console.log(error);
-      // ws.onclose = () => {
-      //   delete servers[ws.servername];
-      //   setToggle((oldToggle: boolean) => !oldToggle);
-      // }
-      // ws.onmessage = ({ data }: { data: string }) => {
-      //   if (chatRef.current) {
-      //     let { scrollHeight, scrollTop, clientHeight } = chatRef.current;
-      //     if (scrollHeight - scrollTop === clientHeight) {
-      //       setTimeout(() => {
-      //         if (chatRef.current) {
-      //           chatRef.current.scrollTop = chatRef.current.scrollHeight;
-      //         }
-      //       }, 50);
-      //     }
-      //   }
-      //   ws.chatHistory.push(data);
-      //   setToggle((oldToggle: boolean) => !oldToggle);
-      // }
-
-      // setServers((oldServers: Servers) => {
-      //   oldServers[servername] = ws;
-      //   return oldServers;
-      // });
-      // setCurrentServer(servername);
     }}>
       <NewInput inputName='servername'
         className='flex flex-1 justify-between gap-4'

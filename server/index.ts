@@ -5,27 +5,98 @@ import { ServerWebSocket } from 'bun';
 
 // This is what we need to implement: https://clerk.com/docs/backend-requests/handling/manual-jwt
 
+interface MessageData {
+  chatRoom: string,
+  content: string,
+}
+
 interface serverCmd {
+  [key: string]: any,
   connect?: string,
   disconnect?: string,
   setColor?: string,
-  message?: {
-    chatRoom: string,
-    content: string,
-  },
+  message: MessageData,
+}
+
+interface UserData {
+  username: string,
+  color: string,
+  userId: string
 }
 
 // This should be turned into an env var, it will change depending on where the project is deployed
-const clientUrl = 'http://localhost:3000';
+// const clientUrl = 'http://localhost:3000';
 
 function validateJWTClaims(jwt: JwtPayload): boolean {
   const currentTime = Date.now()
 
   if (jwt.exp && currentTime > jwt.exp * 1000) return false
   if (jwt.nbf && currentTime < jwt.nbf * 1000) return false
-  if (jwt.azp && clientUrl !== jwt.azp) return false
+  if (jwt.azp && process.env.CLIENT_URL !== jwt.azp) return false
 
   return true
+}
+
+function sendToChatRoom(chatRoom: string, message: string) {
+  for (let username of chatRooms[chatRoom]) {
+    console.log('SENDING MESSAGE')
+    clients[username].send(message);
+  }
+}
+
+function validateUser(sessionToken: string) {
+  if (sessionToken && process.env.CLERK_PEM_PUBLIC_KEY) {
+    const jwtResult = jwt.verify(sessionToken, process.env.CLERK_PEM_PUBLIC_KEY);
+    if (typeof jwtResult !== 'string' && jwtResult.sub && validateJWTClaims(jwtResult)) {
+      return jwtResult;
+    }
+  }
+}
+
+const commandHandler: { [key: string]: Function } = {
+  connect: (ws: ServerWebSocket<UserData>, chatRoom: string) => {
+    chatRooms[chatRoom] ? 
+      chatRooms[chatRoom].push(ws.data.username) : 
+      chatRooms[chatRoom] = [ws.data.username]
+
+    sendToChatRoom(chatRoom, JSON.stringify({
+      chatRoom,
+      formattedMessage: {
+        message: 'has connected',
+        username: ws.data.username,
+        color: ws.data.color,
+      }
+    }));
+  },
+  disconnect: (ws: ServerWebSocket<UserData>, chatRoom: string) => {
+    chatRooms[chatRoom].splice(chatRooms[chatRoom].indexOf(ws.data.username), 1);
+    sendToChatRoom(chatRoom, JSON.stringify({
+      chatRoom: chatRoom,
+      formattedMessage: {
+        message: 'has disconnected',
+        username: ws.data.username,
+        color: ws.data.color,
+      }
+    }));
+  },
+  message: (ws: ServerWebSocket<UserData>, msgData: MessageData) => {
+    sendToChatRoom(msgData.chatRoom, JSON.stringify({
+      chatRoom: msgData.chatRoom,
+      formattedMessage: {
+        message: msgData.content,
+        username: ws.data.username,
+        color: ws.data.color,
+      }
+    }));
+  },
+  setColor: (ws: ServerWebSocket<UserData>, color: string) => {
+    clients[ws.data.username].data.color = color;
+    clerkClient.users.updateUserMetadata(ws.data.userId, {
+      publicMetadata: {
+        color,
+      }
+    });
+  },
 }
 
 // const resOpts = {
@@ -35,57 +106,27 @@ function validateJWTClaims(jwt: JwtPayload): boolean {
 //   },
 // }
 
-// We will need some way to organize users and what chat rooms each user is connected to
-// Probably something like this:
-// servers = {
-//   SERVERNAME: {
-//     username: webSocket,
-//     username2: webSocket2,
-//   }
-// }
-const clients: { [key: string]: ServerWebSocket<{ username: string, color: string }> } = {}
+const clients: { [key: string]: ServerWebSocket<UserData> } = {};
+const chatRooms: { [key: string]: string[] } = {};
 
-const chatRooms: { [key: string]: string[] } = {}
-
-Bun.serve<{ username: string, color: string, userId: string }>({
+Bun.serve<UserData>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
     // It would be nice if this didnt have 4 different return statements
     console.log('NEW REQUEST')
-
-    // Create verifyUser function and stuff all of this in there
-    // Also create a sendMessage(chatRoom, message) function
-    const { __session } = getCookies(req);
-    if (__session && process.env.CLERK_PEM_PUBLIC_KEY) {
-      const jwtResult = jwt.verify(__session, process.env.CLERK_PEM_PUBLIC_KEY);
-      if (typeof jwtResult !== 'string' && jwtResult.sub && validateJWTClaims(jwtResult)) {
-        console.log('JWT CLAIMS ARE VALID');
-        // Get user info from clerk
-        // This info will be very import when we instantiate a new client websocket
-        // Each client websocket should have props username and color
-        //
-        // THEORETICALLY, each user will only have one websocket,
-        // Unlike chat-bun which would create a new webSocket for each chatroom
-        const user = await clerkClient.users.getUser(jwtResult.sub);
-        // console.log(user)
-        // if (user.username) {
-        //   console.log(clients[user.username])
-        // }
-        // console.log(user)
-        if (server.upgrade(req, {
-          data: {
-            userId: jwtResult.sub,
-            username: user.username,
-            color: user.publicMetadata.color || '#ffffff',
-          },
-          // headers: {
-          //   'Access-Control-Allow-Origin': clientUrl,
-          //   'Access-Control-Allow-Credentials': 'true',
-          // }
-        })) return
-      }
+    const jwtResult = validateUser(getCookies(req).__session)
+    if (jwtResult && jwtResult.sub && validateJWTClaims(jwtResult)) {
+      const user = await clerkClient.users.getUser(jwtResult.sub);
+      if (server.upgrade(req, {
+        data: {
+          userId: jwtResult.sub,
+          username: user.username,
+          color: user.publicMetadata.color || '#ffffff',
+        }
+      })) return
     }
+
     console.log('FAILED TO VALIDATE')
     return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
     // return new Response(JSON.stringify('Failed to authorize user'), resOpts);
@@ -94,165 +135,32 @@ Bun.serve<{ username: string, color: string, userId: string }>({
     message(ws, message) {
       // See client index page for message structure
       console.log('RECIEVED MESSAGE', message)
-      // console.log(ws, message)
-      // console.log(typeof message)
       const cmd: serverCmd = JSON.parse(message.toString())
-      if (cmd.connect) {
-        chatRooms[cmd.connect] ? 
-          chatRooms[cmd.connect].push(ws.data.username) : 
-          chatRooms[cmd.connect] = [ws.data.username]
-
-        // if (chatRooms[cmd.connect]) {
-        //   chatRooms[cmd.connect].push(ws.data.username);
-        // } else {
-        //   chatRooms[cmd.connect] = [ws.data.username];
-        // }
-        console.log(chatRooms)
-        // SEND NEW CONNECTION MESSAGE TO ALL USERS
-        for (let username of chatRooms[cmd.connect]) {
-          console.log('SENDING MESSAGE')
-          clients[username].send(JSON.stringify({
-            chatRoom: cmd.connect,
-            formattedMessage: {
-              message: 'has connected',
-              username: ws.data.username,
-              color: ws.data.color
-            }
-          }))
+      for (const key in commandHandler) {
+        if (key in cmd) {
+          commandHandler[key](ws, cmd[key], key === 'message' ? cmd.message?.content : undefined)
+          break;
         }
       }
-
-      if (cmd.message) {
-        for (let username of chatRooms[cmd.message.chatRoom]) {
-          console.log('SENDING MESSAGE')
-          clients[username].send(JSON.stringify({
-            chatRoom: cmd.message.chatRoom,
-            formattedMessage: {
-              message: cmd.message.content,
-              username: ws.data.username,
-              color: ws.data.color
-            }
-          }))
-        }
-      }
-
-      if (cmd.setColor) {
-        console.log('COLOR', cmd.setColor)
-        // should probably convert this to async
-        clerkClient.users.updateUserMetadata(ws.data.userId, {
-          publicMetadata: {
-            color: cmd.setColor,
-          }
-        }).then(() => {
-            ws.send(JSON.stringify({
-              cmdStatus: true,
-            }))
-          })
-
-        // console.log(ws.data.userId)
-
-        // UPDATE EXISTING WEBSOCKET CONNECTION WHEN USER CHANGES THEIR COLOR
-        clients[ws.data.username].data.color = cmd.setColor;
-      }
-
-      if (cmd.disconnect) {
-        // chatRooms[cmd.disconnect] = chatRooms[cmd.disconnect].splice(chatRooms[cmd.disconnect].indexOf(ws.data.username), 1)
-        chatRooms[cmd.disconnect].splice(chatRooms[cmd.disconnect].indexOf(ws.data.username), 1)
-        // console.log('Disconnected ' + ws.data.username + ' from ' + cmd.disconnect)
-        // console.log(chatRooms)
-        // ws.send(JSON.stringify({
-        //   disconnect: cmd.disconnect,
-        // }))
-        for (let username of chatRooms[cmd.disconnect]) {
-          console.log('SENDING MESSAGE')
-          clients[username].send(JSON.stringify({
-            chatRoom: cmd.disconnect,
-            formattedMessage: {
-              message: 'has disconnected',
-              username: ws.data.username,
-              color: ws.data.color
-            }
-          }))
-        }
-      }
-      // ws.send(message)
     },
     open(ws) {
-      // This will probably end up doing nothing
       console.log('OPENING WEBSOCKET')
+      if (clients[ws.data.username]) {
+        clients[ws.data.username].close();
+      }
       clients[ws.data.username] = ws;
-      // ws.send('TEST USER HAS CONNECTED MESSAGE')
-      // console.log('TOTAL CLIENTS', Object.keys(clients).length)
-      // ws.send(JSON.stringify({
-      //   msg: 'TEST USER HAS CONNECTED MESSAGE'
-      // }))
-      // console.log(ws)
+
+      // WORKING
+      // clients[ws.data.username] = ws;
     },
     close(ws, code, reason) {
-      // This will probably also end up doing nothing
       console.log('CLOSING WEBSOCKET')
-      delete clients[ws.data.username]
-
+      delete clients[ws.data.username];
       for (let chatName in chatRooms) {
         if (chatRooms[chatName].includes(ws.data.username)) {
-          chatRooms[chatName].splice(chatRooms[chatName].indexOf(ws.data.username), 1)
+          chatRooms[chatName].splice(chatRooms[chatName].indexOf(ws.data.username), 1);
         }
       }
-
-      // YOU MUST POP ALL USERNAMES FROM ALL CHAT ROOMS
-      // THIS IS WHY WE GET DUPLICATE CONNECTIONS
-
-      // console.log(ws, code, reason)
     },
   }
 })
-
-// OLD SERVER
-// Bun.serve({
-//   port: 8000,
-//   async fetch(req: Request) {
-//     // You can probably replace this with the getCookies module
-//     const cookies: { [key: string]: string } = {};
-//     req.headers.get('cookie')?.split('; ').forEach((cookie: string) => {
-//       const splitCookie = cookie.split('=')
-//       cookies[splitCookie[0]] = splitCookie[1]
-//     })
-//     // console.log(cookies)
-//     const key = process.env.CLERK_PEM_PUBLIC_KEY
-//     // console.log(key)
-//     // console.log(req.headers.authorization)
-//     if (key) {
-//       const jwtResult = jwt.verify(cookies.__session, key)
-//       // console.log(jwt.verify('poopydoodoo', key))
-//       // console.log(jwtResult)
-//       // console.log(jwtResult.sub)
-//       const userId = jwtResult.sub?.toString();
-//       if (userId && typeof jwtResult !== 'string' && validateJWTClaims(jwtResult)) {
-//         // console.log(await clerkClient.users.getUser(userId))
-//         const user = await clerkClient.users.getUser(userId);
-//         console.log(user)
-//       }
-// 
-//       // How do we edit user.publicMetadata or user.privateMetadata
-//       // Determine max size of user metadata, try to post like a 10k character long string
-//       //    - Organization metadata must be less than 8kb
-// 
-//       // if (typeof(jwtResult) !== 'string') {
-//       //   console.log(validateJWTClaims(jwtResult))
-//       // }
-//     }
-//     // console.log(Date.now())
-//     
-//     console.log('Received Request')
-//     return new Response(JSON.stringify('Bun Response'), {
-//       headers: {
-//         // 'Content-Type': 'application/json',
-//         // 'Access-Control-Allow-Origin': '*',
-//         // 'Access-Control-Allow-Headers': 'Content-Type',
-//         // 'Access-Control-Allow-Origin': 'http://localhost:3000',
-//         'Access-Control-Allow-Origin': clientUrl,
-//         'Access-Control-Allow-Credentials': 'true',
-//       }
-//     })
-//   }
-// })

@@ -9,6 +9,7 @@ import { Server, ServerWebSocket } from "bun"
 // interface Servers {
 //   [key: string]: ServerObj,
 // }
+
 interface Servers {
   [key: string]: string[]
 }

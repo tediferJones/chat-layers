@@ -11,7 +11,7 @@ export default function ChatHistory({
   servers: Servers,
   currentServer: string,
   chatRef: RefObject<HTMLDivElement>,
-  webSocket?: WebSocket
+  webSocket?: WebSocket,
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   return (
@@ -21,18 +21,11 @@ export default function ChatHistory({
         tabIndex={0}
         ref={chatRef}
       >
-        {// !Object.keys(servers).includes(currentServer) ? <div className='w-full h-full flex justify-center items-center text-xl'>Please connect to a chat room</div>:
-          !servers[currentServer] ? <div className='w-full h-full flex justify-center items-center text-xl'>Please connect to a chat room</div>:
-          // servers[currentServer].chatHistory.map((msg: string, i: number) => {
+        {!servers[currentServer] ? <div className='w-full h-full flex justify-center items-center text-xl'>Please connect to a chat room</div>:
           servers[currentServer].map((msg: any, i: number) => {
-            // if (i === 0) console.log('##############################################')
-            // console.log(msg)
-            const newMessage = msg
-            // const newMessage = JSON.parse(msg);
-            // THIS EXPECTS A JSON STRING FORMATED AS { username, color, message }
             return <div className='break-words' key={i}>
-              <span style={{ color: newMessage.color }}>{newMessage.username}</span>
-              <span>{newMessage.message === 'has connected' ? ' ' : ': '}{newMessage.message}</span>
+              <span style={{ color: msg.color }}>{msg.username}</span>
+              <span>{msg.message === 'has connected' ? ' ' : ': '}{msg.message}</span>
             </div>
           })
         }
@@ -45,11 +38,6 @@ export default function ChatHistory({
           const form = e.target as HTMLFormElement;
           const inputs = getFormInputs(form)
           const message: string = inputs.message.trim();
-          // console.log('SENDING ' + message)
-          // console.log(webSocket)
-          // WORKING
-          // webSocket?.send(message)
-
           if (message) {
             webSocket?.send(JSON.stringify({
               message: {
@@ -59,10 +47,6 @@ export default function ChatHistory({
             }))
           }
 
-          // if (message && Object.keys(servers).includes(currentServer)) {
-          //   console.log('SEND MESSAGE VIA WEBSOCKET CONNECTION')
-          //   // servers[currentServer].send(message);
-          // }
           form.reset()
         }}
       >

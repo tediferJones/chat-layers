@@ -1,13 +1,7 @@
-import { useState } from 'react';
-// import { clerkClient } from '@clerk/nextjs/server';
-// import easyFetch from '@/modules/easyFetch';
+import { useState, RefObject } from 'react';
 import { verifyInputs, viewErrors, getFormInputs } from '@/modules/inputValidation';
-// import { ResBody } from '@/types';
-import { RefObject } from 'react';
 
-export default function Settings({ color, userId, setRefreshToggle, webSocket, setColor, usernameRef }: 
-  { color: string, userId: string, setRefreshToggle?: Function, webSocket?: WebSocket, setColor?: Function, usernameRef: RefObject<HTMLHeadingElement>  }
-) {
+export default function Settings({ color, webSocket, usernameRef }: { color: string, webSocket?: WebSocket, usernameRef: RefObject<HTMLHeadingElement>  }) {
   const [colorForm, setColorForm] = useState<boolean>(false);
 
   return (
@@ -24,50 +18,23 @@ export default function Settings({ color, userId, setRefreshToggle, webSocket, s
       <form className={`flex gap-4 absolute top-14 right-4 bg-gray-800 p-4 rounded-full${colorForm ? '' : ' hidden'}`}
         onSubmit={async (e) => {
           e.preventDefault();
-          console.log('CHANGE COLOR')
-
           const form = e.target as HTMLFormElement;
           const inputs = getFormInputs(form);
           const validation = verifyInputs(inputs);
-          console.log(inputs)
           if (!validation.isValid) {
             return viewErrors(form, validation.errors);
           }
-          // console.log(inputs.color)
-          webSocket?.send(JSON.stringify({
-            setColor: inputs.color
-          }))
 
-          // Set change color of displayed username manually
-          if (usernameRef.current) {
-            usernameRef.current.style.color = inputs.color
+          if (webSocket) {
+            webSocket.send(JSON.stringify({
+              setColor: inputs.color
+            }))
+
+            // Set change color of displayed username manually
+            if (usernameRef.current) {
+              usernameRef.current.style.color = inputs.color
+            }
           }
-
-          // document.querySelector('#testId').style.color = inputs.color
-          // setColor(inputs.color)
-
-          // If we dont need a server response, we can just refresh this component
-          // And we wont need to mess with the onmessage function to get this working
-
-          // TO UPDATE COLOR, create a color state var in chatHistory, pass it to this component
-          // When we run setColor it should trigger a re-render
-
-          // YOU WILL PROBABLY HAVE TO BUILD AN API ROUTE FOR THIS PART
-          // OR YOU JUST SEND A COMMAND TO THE WEBSOCKET SERVER
-          // clerkClient.users.updateUserMetadata()
-
-          // const form = e.target as HTMLFormElement;
-          // const inputs = getFormInputs(form);
-          // const validation = verifyInputs(inputs);
-          // if (!validation.isValid) {
-          //   return viewErrors(form, validation.errors);
-          // }
-
-          // const resBody: ResBody = await easyFetch('/api/setColor', 'POST', inputs);
-          // if (Object.keys(resBody.errors).length) {
-          //   return viewErrors(form, resBody.errors);
-          // }
-          // setRefreshToggle((oldToggle: boolean) => !oldToggle);
         }}
       >
         <input className='my-auto' name='color' type='color' defaultValue={color}/>
