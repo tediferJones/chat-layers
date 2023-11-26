@@ -3,8 +3,6 @@ import clerkClient from '@clerk/clerk-sdk-node';
 import getCookies from './modules/getCookies';
 import { ServerWebSocket } from 'bun';
 
-// This is what we need to implement: https://clerk.com/docs/backend-requests/handling/manual-jwt
-
 interface MessageData {
   chatRoom: string,
   content: string,
@@ -24,9 +22,6 @@ interface UserData {
   userId: string
 }
 
-// This should be turned into an env var, it will change depending on where the project is deployed
-// const clientUrl = 'http://localhost:3000';
-
 function validateJWTClaims(jwt: JwtPayload): boolean {
   const currentTime = Date.now()
 
@@ -39,12 +34,11 @@ function validateJWTClaims(jwt: JwtPayload): boolean {
 
 function sendToChatRoom(chatRoom: string, message: string) {
   for (let username of chatRooms[chatRoom]) {
-    console.log('SENDING MESSAGE')
     clients[username].send(message);
   }
 }
 
-function validateUser(sessionToken: string) {
+function decryptToken(sessionToken: string) {
   if (sessionToken && process.env.CLERK_PEM_PUBLIC_KEY) {
     const jwtResult = jwt.verify(sessionToken, process.env.CLERK_PEM_PUBLIC_KEY);
     if (typeof jwtResult !== 'string' && jwtResult.sub && validateJWTClaims(jwtResult)) {
@@ -99,13 +93,6 @@ const commandHandler: { [key: string]: Function } = {
   },
 }
 
-// const resOpts = {
-//   headers: {
-//     'Access-Control-Allow-Origin': clientUrl,
-//     'Access-Control-Allow-Credentials': 'true',
-//   },
-// }
-
 const clients: { [key: string]: ServerWebSocket<UserData> } = {};
 const chatRooms: { [key: string]: string[] } = {};
 
@@ -113,9 +100,7 @@ Bun.serve<UserData>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
-    // It would be nice if this didnt have 4 different return statements
-    console.log('NEW REQUEST')
-    const jwtResult = validateUser(getCookies(req).__session)
+    const jwtResult = decryptToken(getCookies(req).__session)
     if (jwtResult && jwtResult.sub && validateJWTClaims(jwtResult)) {
       const user = await clerkClient.users.getUser(jwtResult.sub);
       if (server.upgrade(req, {
@@ -127,14 +112,10 @@ Bun.serve<UserData>({
       })) return
     }
 
-    console.log('FAILED TO VALIDATE')
     return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
-    // return new Response(JSON.stringify('Failed to authorize user'), resOpts);
   },
   websocket: {
     message(ws, message) {
-      // See client index page for message structure
-      console.log('RECIEVED MESSAGE', message)
       const cmd: serverCmd = JSON.parse(message.toString())
       for (const key in commandHandler) {
         if (key in cmd) {
@@ -144,17 +125,10 @@ Bun.serve<UserData>({
       }
     },
     open(ws) {
-      console.log('OPENING WEBSOCKET')
-      if (clients[ws.data.username]) {
-        clients[ws.data.username].close();
-      }
+      if (clients[ws.data.username]) clients[ws.data.username].close();
       clients[ws.data.username] = ws;
-
-      // WORKING
-      // clients[ws.data.username] = ws;
     },
-    close(ws, code, reason) {
-      console.log('CLOSING WEBSOCKET')
+    close(ws) {
       delete clients[ws.data.username];
       for (let chatName in chatRooms) {
         if (chatRooms[chatName].includes(ws.data.username)) {

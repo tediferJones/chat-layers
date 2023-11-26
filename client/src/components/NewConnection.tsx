@@ -1,9 +1,6 @@
-import { RefObject } from 'react';
 import NewInput from '@/components/NewInput';
 import { verifyInputs, viewErrors, getFormInputs } from '@/modules/inputValidation';
-// import { ResBody, ServerObj, Servers } from '@/types';
 import { Servers } from '@/types';
-import easyFetch from '@/modules/easyFetch';
 
 export default function NewConnection({ 
   servers, 
@@ -19,7 +16,6 @@ export default function NewConnection({
   return (
     <form className='flex flex-wrap gap-4' onSubmit={async(e) => {
       e.preventDefault();
-      console.log('FORM SUBMIT')
       const form = e.target as HTMLFormElement;
       const { servername } = getFormInputs(form)
 

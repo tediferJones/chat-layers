@@ -1,4 +1,4 @@
-import { FormInputs } from 'types'
+import { FormInputs } from '@/types'
 
 export const inputConstraints: {
   [key: string]: { 
@@ -9,10 +9,7 @@ export const inputConstraints: {
     isHex?: boolean,
   }  
 } = {
-    username: { minLength: 8, maxLength: 32, required: true },
-    password: { minLength: 8, maxLength: 32, required: true },
     servername: { minLength: 4, maxLength: 32, required: true },
-    confirm: { match: 'password', required: true },
     color: { isHex: true, required: true },
   }
 

@@ -34,7 +34,6 @@ export default function ChatHistory({
         ref={formRef}
         onSubmit={(e) => {
           e.preventDefault();
-          console.log('SEND MESSAGE')
           const form = e.target as HTMLFormElement;
           const inputs = getFormInputs(form)
           const message: string = inputs.message.trim();
