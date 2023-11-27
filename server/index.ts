@@ -39,8 +39,10 @@ function sendToChatRoom(chatRoom: string, message: string) {
 }
 
 function decryptToken(sessionToken: string) {
+  console.log('Session Token Value: ' + sessionToken)
   if (sessionToken && process.env.CLERK_PEM_PUBLIC_KEY) {
     const jwtResult = jwt.verify(sessionToken, process.env.CLERK_PEM_PUBLIC_KEY);
+    console.log('INSIDE DECRYPT FUNCTION JWTRESULT: ', jwtResult)
     if (typeof jwtResult !== 'string' && jwtResult.sub && validateJWTClaims(jwtResult)) {
       return jwtResult;
     }
@@ -95,6 +97,7 @@ const commandHandler: { [key: string]: Function } = {
 
 const clients: { [key: string]: ServerWebSocket<UserData> } = {};
 const chatRooms: { [key: string]: string[] } = {};
+let counter = 1;
 
 // Bun.serve<UserData>({
 const server = Bun.serve<UserData>({
@@ -102,9 +105,12 @@ const server = Bun.serve<UserData>({
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
     console.log('NEW REQUEST')
+    console.log('RAW COOKIES FROM REQUEST', req.headers.get('cookie'))
+    console.log('cookies from getCookies function', getCookies(req))
     const jwtResult = decryptToken(getCookies(req).__session)
     console.log('JWT RESULT', jwtResult)
     console.log('CLAIMS ARE VALID?', jwtResult ? validateJWTClaims(jwtResult) : 'jwtResult is invalid')
+    // This is redundant, we already did this in decryptToken function
     if (jwtResult && jwtResult.sub && validateJWTClaims(jwtResult)) {
       console.log('USER IS AUTHORIZED')
       const user = await clerkClient.users.getUser(jwtResult.sub);
@@ -126,7 +132,15 @@ const server = Bun.serve<UserData>({
       //   }
       // })) return
     }
-    console.log('FAILED TO VALIDATE')
+    console.log('FAILED TO VALIDATE, but we\'re gunna upgrade anyways cuz testing')
+    const upgrade = server.upgrade(req, {
+      data: {
+        userId: 'FAKE-ID',
+        username: 'Username' + counter++,
+        color: '#ffffff',
+      }
+    });
+    if (upgrade) return
 
     return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
   },
