@@ -96,26 +96,43 @@ const commandHandler: { [key: string]: Function } = {
 const clients: { [key: string]: ServerWebSocket<UserData> } = {};
 const chatRooms: { [key: string]: string[] } = {};
 
-Bun.serve<UserData>({
+// Bun.serve<UserData>({
+const server = Bun.serve<UserData>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
+    console.log('NEW REQUEST')
     const jwtResult = decryptToken(getCookies(req).__session)
+    console.log('JWT RESULT', jwtResult)
+    console.log('CLAIMS ARE VALID?', jwtResult ? validateJWTClaims(jwtResult) : 'jwtResult is invalid')
     if (jwtResult && jwtResult.sub && validateJWTClaims(jwtResult)) {
+      console.log('USER IS AUTHORIZED')
       const user = await clerkClient.users.getUser(jwtResult.sub);
-      if (server.upgrade(req, {
+      console.log('USER DATA', user)
+      const upgrade = server.upgrade(req, {
         data: {
           userId: jwtResult.sub,
           username: user.username,
           color: user.publicMetadata.color || '#ffffff',
         }
-      })) return
+      });
+      console.log('UPGRADE RESULT', upgrade)
+      if (upgrade) return
+      // if (server.upgrade(req, {
+      //   data: {
+      //     userId: jwtResult.sub,
+      //     username: user.username,
+      //     color: user.publicMetadata.color || '#ffffff',
+      //   }
+      // })) return
     }
+    console.log('FAILED TO VALIDATE')
 
     return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
   },
   websocket: {
     message(ws, message) {
+      console.log('SEND MESSAGE: ', message)
       const cmd: serverCmd = JSON.parse(message.toString())
       for (const key in commandHandler) {
         if (key in cmd) {
@@ -125,10 +142,12 @@ Bun.serve<UserData>({
       }
     },
     open(ws) {
+      console.log('OPENING WEBSOCKET')
       if (clients[ws.data.username]) clients[ws.data.username].close();
       clients[ws.data.username] = ws;
     },
     close(ws) {
+      console.log('CLOSING WEBSOCKET')
       delete clients[ws.data.username];
       for (let chatName in chatRooms) {
         if (chatRooms[chatName].includes(ws.data.username)) {
@@ -138,3 +157,5 @@ Bun.serve<UserData>({
     },
   }
 })
+
+console.log('SERVER IS RUNNING', server)
