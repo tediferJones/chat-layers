@@ -1,6 +1,4 @@
-import jwt, { JwtPayload } from 'jsonwebtoken';
 import clerkClient from '@clerk/clerk-sdk-node';
-import getCookies from './modules/getCookies';
 import { ServerWebSocket } from 'bun';
 
 interface MessageData {
@@ -22,30 +20,9 @@ interface UserData {
   userId: string
 }
 
-function validateJWTClaims(jwt: JwtPayload): boolean {
-  const currentTime = Date.now()
-
-  if (jwt.exp && currentTime > jwt.exp * 1000) return false
-  if (jwt.nbf && currentTime < jwt.nbf * 1000) return false
-  if (jwt.azp && process.env.CLIENT_URL !== jwt.azp) return false
-
-  return true
-}
-
 function sendToChatRoom(chatRoom: string, message: string) {
   for (let username of chatRooms[chatRoom]) {
     clients[username].send(message);
-  }
-}
-
-function decryptToken(sessionToken: string) {
-  console.log('Session Token Value: ' + sessionToken)
-  if (sessionToken && process.env.CLERK_PEM_PUBLIC_KEY) {
-    const jwtResult = jwt.verify(sessionToken, process.env.CLERK_PEM_PUBLIC_KEY);
-    console.log('INSIDE DECRYPT FUNCTION JWTRESULT: ', jwtResult)
-    if (typeof jwtResult !== 'string' && jwtResult.sub && validateJWTClaims(jwtResult)) {
-      return jwtResult;
-    }
   }
 }
 
@@ -97,56 +74,30 @@ const commandHandler: { [key: string]: Function } = {
 
 const clients: { [key: string]: ServerWebSocket<UserData> } = {};
 const chatRooms: { [key: string]: string[] } = {};
-let counter = 1;
 
-// Bun.serve<UserData>({
 const server = Bun.serve<UserData>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
   async fetch(req, server) {
-    console.log('NEW REQUEST')
-    console.log('RAW COOKIES FROM REQUEST', req.headers.get('cookie'))
-    console.log('cookies from getCookies function', getCookies(req))
-    const jwtResult = decryptToken(getCookies(req).__session)
-    console.log('JWT RESULT', jwtResult)
-    console.log('CLAIMS ARE VALID?', jwtResult ? validateJWTClaims(jwtResult) : 'jwtResult is invalid')
-    // This is redundant, we already did this in decryptToken function
-    if (jwtResult && jwtResult.sub && validateJWTClaims(jwtResult)) {
-      console.log('USER IS AUTHORIZED')
-      const user = await clerkClient.users.getUser(jwtResult.sub);
-      console.log('USER DATA', user)
-      const upgrade = server.upgrade(req, {
+    // Is it a bad idea to send the raw userId as a URL parameter? Most certainly
+    const userId = new URL(req.url).searchParams.get('userId');
+    if (userId) {
+      const [ user ] = await clerkClient.users.getUserList({
+        userId: [ userId ]
+      });
+      if (user && server.upgrade(req, {
         data: {
-          userId: jwtResult.sub,
+          userId,
           username: user.username,
           color: user.publicMetadata.color || '#ffffff',
         }
-      });
-      console.log('UPGRADE RESULT', upgrade)
-      if (upgrade) return
-      // if (server.upgrade(req, {
-      //   data: {
-      //     userId: jwtResult.sub,
-      //     username: user.username,
-      //     color: user.publicMetadata.color || '#ffffff',
-      //   }
-      // })) return
+      })) return
     }
-    console.log('FAILED TO VALIDATE, but we\'re gunna upgrade anyways cuz testing')
-    const upgrade = server.upgrade(req, {
-      data: {
-        userId: 'FAKE-ID',
-        username: 'Username' + counter++,
-        color: '#ffffff',
-      }
-    });
-    if (upgrade) return
 
     return new Response(JSON.stringify('Failed to authorize user'), { status: 401 });
   },
   websocket: {
     message(ws, message) {
-      console.log('SEND MESSAGE: ', message)
       const cmd: serverCmd = JSON.parse(message.toString())
       for (const key in commandHandler) {
         if (key in cmd) {
@@ -156,12 +107,10 @@ const server = Bun.serve<UserData>({
       }
     },
     open(ws) {
-      console.log('OPENING WEBSOCKET')
       if (clients[ws.data.username]) clients[ws.data.username].close();
       clients[ws.data.username] = ws;
     },
     close(ws) {
-      console.log('CLOSING WEBSOCKET')
       delete clients[ws.data.username];
       for (let chatName in chatRooms) {
         if (chatRooms[chatName].includes(ws.data.username)) {
