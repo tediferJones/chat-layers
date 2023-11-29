@@ -75,6 +75,14 @@ const commandHandler: { [key: string]: Function } = {
 const clients: { [key: string]: ServerWebSocket<UserData> } = {};
 const chatRooms: { [key: string]: string[] } = {};
 
+// Prevent clients from automatically disconnecting
+setInterval(() => {
+  const ping = JSON.stringify({ ping: true })
+  for (let client in clients) {
+    clients[client].send(ping)
+  }
+}, 1000*60*3)
+
 const server = Bun.serve<UserData>({
   port: process.env.PORT || 8000,
   development: process.env.PORT ? false : true,
